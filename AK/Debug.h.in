@@ -498,6 +498,10 @@
 #cmakedefine01 WASM_VALIDATOR_DEBUG
 #endif
 
+#ifndef WEBP_DEBUG
+#cmakedefine01 WEBP_DEBUG
+#endif
+
 #ifndef WEBDRIVER_DEBUG
 #cmakedefine01 WEBDRIVER_DEBUG
 #endif

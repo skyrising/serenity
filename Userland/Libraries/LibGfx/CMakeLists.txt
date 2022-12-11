@@ -47,6 +47,9 @@ set(SOURCES
     TextDirection.cpp
     TextLayout.cpp
     Triangle.cpp
+    WebP/WebPLoader.cpp
+    WebP/VP8Decoder.cpp
+    WebP/LosslessDecoder.cpp
     WindowTheme.cpp
 )
 
