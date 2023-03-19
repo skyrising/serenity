@@ -21,6 +21,7 @@
 namespace Web::CSS {
 
 struct MatchingRule {
+    JS::GCPtr<DOM::ShadowRoot const> shadow_root;
     JS::GCPtr<CSSStyleRule const> rule;
     size_t style_sheet_index { 0 };
     size_t rule_index { 0 };

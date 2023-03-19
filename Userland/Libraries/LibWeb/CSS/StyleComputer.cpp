@@ -52,6 +52,7 @@
 #include <LibWeb/CSS/StyleValues/UnresolvedStyleValue.h>
 #include <LibWeb/DOM/Document.h>
 #include <LibWeb/DOM/Element.h>
+#include <LibWeb/DOM/ShadowRoot.h>
 #include <LibWeb/FontCache.h>
 #include <LibWeb/HTML/HTMLHtmlElement.h>
 #include <LibWeb/Layout/Node.h>
@@ -183,13 +184,34 @@ template<typename Callback>
 void StyleComputer::for_each_stylesheet(CascadeOrigin cascade_origin, Callback callback) const
 {
     if (cascade_origin == CascadeOrigin::UserAgent) {
-        callback(default_stylesheet(document()));
+        callback(default_stylesheet(document()), {});
         if (document().in_quirks_mode())
-            callback(quirks_mode_stylesheet(document()));
+            callback(quirks_mode_stylesheet(document()), {});
+
+        // NOTE: document (author) style sheets are not inherited into shadow roots, but we want to supply the user-agent styles anyway
+        const_cast<DOM::Document&>(document()).for_each_shadow_including_descendant([&](auto& node) {
+            if (node.is_shadow_root()) {
+                JS::GCPtr<DOM::ShadowRoot> shadow_root = static_cast<DOM::ShadowRoot*>(&node);
+                callback(default_stylesheet(document()), shadow_root);
+                if (document().in_quirks_mode())
+                    callback(quirks_mode_stylesheet(document()), shadow_root);
+            }
+            return IterationDecision::Continue;
+        });
     }
     if (cascade_origin == CascadeOrigin::Author) {
         for (auto const& sheet : document().style_sheets().sheets())
-            callback(*sheet);
+            callback(*sheet, {});
+
+        const_cast<DOM::Document&>(document()).for_each_shadow_including_descendant([&](auto& node) {
+            if (node.is_shadow_root()) {
+                JS::GCPtr<DOM::ShadowRoot> shadow_root = static_cast<DOM::ShadowRoot*>(&node);
+                Vector<JS::NonnullGCPtr<CSSStyleSheet const>> sheets;
+                for (auto const& sheet : shadow_root->style_sheets().sheets())
+                    callback(*sheet, shadow_root);
+            }
+            return IterationDecision::Continue;
+        });
     }
 }
 
@@ -207,6 +229,9 @@ StyleComputer::RuleCache const& StyleComputer::rule_cache_for_cascade_origin(Cas
 
 Vector<MatchingRule> StyleComputer::collect_matching_rules(DOM::Element const& element, CascadeOrigin cascade_origin, Optional<CSS::Selector::PseudoElement> pseudo_element) const
 {
+    auto const& root_node = element.root();
+    JS::GCPtr<DOM::ShadowRoot const> shadow_root = is<DOM::ShadowRoot>(root_node) ? static_cast<DOM::ShadowRoot const*>(&root_node) : nullptr;
+
     auto const& rule_cache = rule_cache_for_cascade_origin(cascade_origin);
 
     Vector<MatchingRule> rules_to_run;
@@ -236,6 +261,11 @@ Vector<MatchingRule> StyleComputer::collect_matching_rules(DOM::Element const& e
     Vector<MatchingRule> matching_rules;
     matching_rules.ensure_capacity(rules_to_run.size());
     for (auto const& rule_to_run : rules_to_run) {
+        // FIXME: This needs to be revised when adding support for the :host and ::shadow selectors, which transition shadow tree boundaries
+        auto rule_root = rule_to_run.shadow_root;
+        if (rule_root != shadow_root)
+            continue;
+
         auto const& selector = rule_to_run.rule->selectors()[rule_to_run.selector_index];
         if (SelectorEngine::matches(selector, element, pseudo_element))
             matching_rules.append(rule_to_run);
@@ -1627,12 +1657,13 @@ NonnullOwnPtr<StyleComputer::RuleCache> StyleComputer::make_rule_cache_for_casca
 
     Vector<MatchingRule> matching_rules;
     size_t style_sheet_index = 0;
-    for_each_stylesheet(cascade_origin, [&](auto& sheet) {
+    for_each_stylesheet(cascade_origin, [&](auto& sheet, JS::GCPtr<DOM::ShadowRoot> shadow_root) {
         size_t rule_index = 0;
         sheet.for_each_effective_style_rule([&](auto const& rule) {
             size_t selector_index = 0;
             for (CSS::Selector const& selector : rule.selectors()) {
                 MatchingRule matching_rule {
+                    shadow_root,
                     &rule,
                     style_sheet_index,
                     rule_index,
