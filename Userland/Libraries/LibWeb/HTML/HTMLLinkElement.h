@@ -129,6 +129,7 @@ private:
 
     RefPtr<Resource> m_preload_resource;
     JS::GCPtr<CSS::CSSStyleSheet> m_loaded_style_sheet;
+    JS::GCPtr<CSS::StyleSheetList> m_document_or_shadow_root_style_sheets;
 
     Optional<DOM::DocumentLoadEventDelayer> m_document_load_event_delayer;
     unsigned m_relationship { 0 };

@@ -7,6 +7,7 @@
 
 #include <LibWeb/CSS/Parser/Parser.h>
 #include <LibWeb/DOM/Document.h>
+#include <LibWeb/DOM/ShadowRoot.h>
 #include <LibWeb/HTML/HTMLStyleElement.h>
 #include <LibWeb/Infra/Strings.h>
 
@@ -30,7 +31,8 @@ JS::ThrowCompletionOr<void> HTMLStyleElement::initialize(JS::Realm& realm)
 void HTMLStyleElement::visit_edges(Cell::Visitor& visitor)
 {
     Base::visit_edges(visitor);
-    visitor.visit(m_associated_css_style_sheet.ptr());
+    visitor.visit(m_associated_css_style_sheet);
+    visitor.visit(m_document_or_shadow_root_style_sheets);
 }
 
 void HTMLStyleElement::children_changed()
@@ -53,10 +55,10 @@ void HTMLStyleElement::removed_from(Node* old_parent)
 }
 
 // https://www.w3.org/TR/cssom/#remove-a-css-style-sheet
-static void remove_a_css_style_sheet(DOM::Document& document, CSS::CSSStyleSheet& sheet)
+static void remove_a_css_style_sheet(CSS::StyleSheetList& document_or_shadow_root_style_sheets, CSS::CSSStyleSheet& sheet)
 {
     // 1. Remove the CSS style sheet from the list of document or shadow root CSS style sheets.
-    document.style_sheets().remove_sheet(sheet);
+    document_or_shadow_root_style_sheets.remove_sheet(sheet);
 
     // 2. Set the CSS style sheet’s parent CSS style sheet, owner node and owner CSS rule to null.
     sheet.set_parent_css_style_sheet(nullptr);
@@ -65,10 +67,10 @@ static void remove_a_css_style_sheet(DOM::Document& document, CSS::CSSStyleSheet
 }
 
 // https://www.w3.org/TR/cssom/#add-a-css-style-sheet
-static void add_a_css_style_sheet(DOM::Document& document, CSS::CSSStyleSheet& sheet)
+static void add_a_css_style_sheet(CSS::StyleSheetList& document_or_shadow_root_style_sheets, CSS::CSSStyleSheet& sheet)
 {
     // 1. Add the CSS style sheet to the list of document or shadow root CSS style sheets at the appropriate location. The remainder of these steps deal with the disabled flag.
-    document.style_sheets().add_sheet(sheet);
+    document_or_shadow_root_style_sheets.add_sheet(sheet);
 
     // 2. If the disabled flag is set, then return.
     if (sheet.disabled())
@@ -85,7 +87,7 @@ static void add_a_css_style_sheet(DOM::Document& document, CSS::CSSStyleSheet& s
 }
 
 // https://www.w3.org/TR/cssom/#create-a-css-style-sheet
-static void create_a_css_style_sheet(DOM::Document& document, DeprecatedString type, DOM::Element* owner_node, DeprecatedString media, DeprecatedString title, bool alternate, bool origin_clean, DeprecatedString location, CSS::CSSStyleSheet* parent_style_sheet, CSS::CSSRule* owner_rule, CSS::CSSStyleSheet& sheet)
+static void create_a_css_style_sheet(CSS::StyleSheetList& document_or_shadow_root_style_sheets, DeprecatedString type, DOM::Element* owner_node, DeprecatedString media, DeprecatedString title, bool alternate, bool origin_clean, DeprecatedString location, CSS::CSSStyleSheet* parent_style_sheet, CSS::CSSRule* owner_rule, CSS::CSSStyleSheet& sheet)
 {
     // 1. Create a new CSS style sheet object and set its properties as specified.
     // FIXME: We receive `sheet` from the caller already. This is weird.
@@ -101,7 +103,7 @@ static void create_a_css_style_sheet(DOM::Document& document, DeprecatedString t
     sheet.set_location(move(location));
 
     // 2. Then run the add a CSS style sheet steps for the newly created CSS style sheet.
-    add_a_css_style_sheet(document, sheet);
+    add_a_css_style_sheet(document_or_shadow_root_style_sheets, sheet);
 }
 
 // The user agent must run the "update a style block" algorithm whenever one of the following conditions occur:
@@ -120,9 +122,11 @@ void HTMLStyleElement::update_a_style_block()
     // 2. If element has an associated CSS style sheet, remove the CSS style sheet in question.
 
     if (m_associated_css_style_sheet) {
-        remove_a_css_style_sheet(document(), *m_associated_css_style_sheet);
+        VERIFY(m_document_or_shadow_root_style_sheets);
+        remove_a_css_style_sheet(*m_document_or_shadow_root_style_sheets, *m_associated_css_style_sheet);
 
         // FIXME: This should probably be handled by StyleSheet::set_owner_node().
+        m_document_or_shadow_root_style_sheets = nullptr;
         m_associated_css_style_sheet = nullptr;
     }
 
@@ -144,11 +148,12 @@ void HTMLStyleElement::update_a_style_block()
         return;
 
     // FIXME: This should probably be handled by StyleSheet::set_owner_node().
+    m_document_or_shadow_root_style_sheets = document_or_shadow_root_style_sheets();
     m_associated_css_style_sheet = sheet;
 
     // 6. Create a CSS style sheet with the following properties...
     create_a_css_style_sheet(
-        document(),
+        *m_document_or_shadow_root_style_sheets,
         "text/css"sv,
         this,
         attribute(HTML::AttributeNames::media),

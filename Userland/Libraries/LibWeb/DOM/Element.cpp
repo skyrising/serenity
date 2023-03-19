@@ -1770,4 +1770,13 @@ HashMap<DeprecatedFlyString, CSS::StyleProperty> const& Element::custom_properti
     return m_pseudo_element_custom_properties[to_underlying(pseudo_element.value())];
 }
 
+CSS::StyleSheetList& Element::document_or_shadow_root_style_sheets()
+{
+    auto& root_node = root();
+    if (is<DOM::ShadowRoot>(root_node))
+        return static_cast<DOM::ShadowRoot&>(root_node).style_sheets();
+
+    return document().style_sheets();
+}
+
 }

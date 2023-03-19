@@ -12,6 +12,7 @@
 #include <AK/URL.h>
 #include <LibWeb/CSS/Parser/Parser.h>
 #include <LibWeb/DOM/Document.h>
+#include <LibWeb/DOM/ShadowRoot.h>
 #include <LibWeb/DOM/Event.h>
 #include <LibWeb/Fetch/Fetching/Fetching.h>
 #include <LibWeb/Fetch/Infrastructure/FetchAlgorithms.h>
@@ -105,8 +106,10 @@ void HTMLLinkElement::parse_attribute(DeprecatedFlyString const& name, Deprecate
     }
 
     if (m_relationship & Relationship::Stylesheet) {
-        if (name == HTML::AttributeNames::disabled && m_loaded_style_sheet)
-            document().style_sheets().remove_sheet(*m_loaded_style_sheet);
+        if (name == HTML::AttributeNames::disabled && m_loaded_style_sheet) {
+            VERIFY(m_document_or_shadow_root_style_sheets);
+            m_document_or_shadow_root_style_sheets->remove_sheet(*m_loaded_style_sheet);
+        }
 
         // https://html.spec.whatwg.org/multipage/links.html#link-type-stylesheet:fetch-and-process-the-linked-resource
         // The appropriate times to fetch and process this type of link are:
@@ -361,7 +364,9 @@ void HTMLLinkElement::process_stylesheet_resource(bool success, Fetch::Infrastru
 
     // 3. If el has an associated CSS style sheet, remove the CSS style sheet.
     if (m_loaded_style_sheet) {
-        document().style_sheets().remove_sheet(*m_loaded_style_sheet);
+        VERIFY(m_document_or_shadow_root_style_sheets);
+        m_document_or_shadow_root_style_sheets->remove_sheet(*m_loaded_style_sheet);
+        m_document_or_shadow_root_style_sheets = nullptr;
         m_loaded_style_sheet = nullptr;
     }
 
@@ -397,7 +402,8 @@ void HTMLLinkElement::process_stylesheet_resource(bool success, Fetch::Infrastru
 
         if (m_loaded_style_sheet) {
             m_loaded_style_sheet->set_owner_node(this);
-            document().style_sheets().add_sheet(*m_loaded_style_sheet);
+            m_document_or_shadow_root_style_sheets = document_or_shadow_root_style_sheets();
+            m_document_or_shadow_root_style_sheets->add_sheet(*m_loaded_style_sheet);
         } else {
             dbgln_if(CSS_LOADER_DEBUG, "HTMLLinkElement: Failed to parse stylesheet: {}", resource()->url());
         }
@@ -499,6 +505,7 @@ void HTMLLinkElement::visit_edges(Cell::Visitor& visitor)
 {
     Base::visit_edges(visitor);
     visitor.visit(m_loaded_style_sheet);
+    visitor.visit(m_document_or_shadow_root_style_sheets);
 }
 
 }
