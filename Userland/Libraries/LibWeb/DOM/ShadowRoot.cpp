@@ -53,4 +53,22 @@ WebIDL::ExceptionOr<void> ShadowRoot::set_inner_html(DeprecatedString const& mar
     return {};
 }
 
+CSS::StyleSheetList& ShadowRoot::style_sheets()
+{
+    if (!m_style_sheets)
+        m_style_sheets = CSS::StyleSheetList::create(document()).release_value_but_fixme_should_propagate_errors();
+    return *m_style_sheets;
+}
+
+CSS::StyleSheetList const& ShadowRoot::style_sheets() const
+{
+    return const_cast<ShadowRoot*>(this)->style_sheets();
+}
+
+void ShadowRoot::visit_edges(Visitor& visitor)
+{
+    Base::visit_edges(visitor);
+    visitor.visit(m_style_sheets.ptr());
+}
+
 }

@@ -29,6 +29,14 @@ public:
     WebIDL::ExceptionOr<DeprecatedString> inner_html() const;
     WebIDL::ExceptionOr<void> set_inner_html(DeprecatedString const&);
 
+    CSS::StyleSheetList& style_sheets();
+    CSS::StyleSheetList const& style_sheets() const;
+
+    CSS::StyleSheetList* style_sheets_for_bindings() { return &style_sheets(); }
+
+protected:
+    virtual void visit_edges(Cell::Visitor&) override;
+
 private:
     ShadowRoot(Document&, Element& host, Bindings::ShadowRootMode);
     virtual JS::ThrowCompletionOr<void> initialize(JS::Realm&) override;
@@ -41,6 +49,8 @@ private:
     Bindings::ShadowRootMode m_mode { Bindings::ShadowRootMode::Closed };
     bool m_delegates_focus { false };
     bool m_available_to_element_internals { false };
+
+    JS::GCPtr<CSS::StyleSheetList> m_style_sheets;
 };
 
 template<>

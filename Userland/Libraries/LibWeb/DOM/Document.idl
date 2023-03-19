@@ -2,6 +2,7 @@
 #import <DOM/Comment.idl>
 #import <DOM/DOMImplementation.idl>
 #import <DOM/DocumentFragment.idl>
+#import <DOM/DocumentOrShadowRoot.idl>
 #import <DOM/DocumentType.idl>
 #import <DOM/Element.idl>
 #import <DOM/Event.idl>
@@ -90,8 +91,6 @@ interface Document : Node {
     [CEReactions, NewObject] Node importNode(Node node, optional boolean deep = false);
     [CEReactions, ImplementedAs=adopt_node_binding] Node adoptNode(Node node);
 
-    [ImplementedAs=style_sheets_for_bindings] readonly attribute StyleSheetList styleSheets;
-
     readonly attribute DOMString compatMode;
     readonly attribute DocumentType? doctype;
 
@@ -119,3 +118,4 @@ dictionary ElementCreationOptions {
 };
 Document includes ParentNode;
 Document includes GlobalEventHandlers;
+Document includes DocumentOrShadowRoot;
