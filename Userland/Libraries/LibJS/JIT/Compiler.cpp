@@ -3452,7 +3452,9 @@ OwnPtr<NativeExecutable> Compiler::compile(Bytecode::Executable& bytecode_execut
     }
 
     if constexpr (LOG_JIT_SUCCESS) {
-        dbgln("\033[32;1mJIT compilation succeeded!\033[0m {}", bytecode_executable.name);
+        static size_t s_total_compiled_bytes = 0;
+        s_total_compiled_bytes += compiler.m_output.size();
+        dbgln("\033[32;1mJIT compilation succeeded!\033[0m {} size={} total={}", bytecode_executable.name, compiler.m_output.size(), s_total_compiled_bytes);
     }
 
     auto executable = make<NativeExecutable>(executable_memory, compiler.m_output.size(), mapping);
