@@ -1508,9 +1508,10 @@ void Compiler::compile_new_object(Bytecode::Op::NewObject const&)
 static Value cxx_new_array(VM& vm, size_t element_count, u32 first_register_index)
 {
     auto& realm = *vm.current_realm();
+    auto& interpreter = vm.bytecode_interpreter();
     auto array = MUST(Array::create(realm, 0));
     for (size_t i = 0; i < element_count; ++i) {
-        auto& value = vm.bytecode_interpreter().reg(Bytecode::Register(first_register_index + i));
+        auto& value = interpreter.reg(Bytecode::Register(first_register_index + i));
         array->indexed_properties().put(i, value, default_attributes);
     }
     return array;
@@ -2508,14 +2509,15 @@ void Compiler::compile_put_by_value(Bytecode::Op::PutByValue const& op)
 
 static Value cxx_call(VM& vm, Value callee, u32 first_argument_index, u32 argument_count, Value this_value, Bytecode::Op::CallType call_type, Optional<Bytecode::StringTableIndex> const& expression_string)
 {
-    TRY_OR_SET_EXCEPTION(throw_if_needed_for_call(vm.bytecode_interpreter(), callee, call_type, expression_string));
+    auto& bytecode_interpreter = vm.bytecode_interpreter();
+    TRY_OR_SET_EXCEPTION(throw_if_needed_for_call(bytecode_interpreter, callee, call_type, expression_string));
 
     MarkedVector<Value> argument_values(vm.heap());
     argument_values.ensure_capacity(argument_count);
     for (u32 i = 0; i < argument_count; ++i) {
-        argument_values.unchecked_append(vm.bytecode_interpreter().reg(Bytecode::Register { first_argument_index + i }));
+        argument_values.unchecked_append(bytecode_interpreter.reg(Bytecode::Register { first_argument_index + i }));
     }
-    return TRY_OR_SET_EXCEPTION(perform_call(vm.bytecode_interpreter(), this_value, call_type, callee, move(argument_values)));
+    return TRY_OR_SET_EXCEPTION(perform_call(bytecode_interpreter, this_value, call_type, callee, move(argument_values)));
 }
 
 void Compiler::compile_call(Bytecode::Op::Call const& op)
