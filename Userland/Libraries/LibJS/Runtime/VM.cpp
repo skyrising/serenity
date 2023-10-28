@@ -188,11 +188,6 @@ void VM::enable_default_host_import_module_dynamically_hook()
     };
 }
 
-Bytecode::Interpreter& VM::bytecode_interpreter()
-{
-    return *m_bytecode_interpreter;
-}
-
 void VM::gather_roots(HashMap<Cell*, HeapRoot>& roots)
 {
     roots.set(m_empty_string, HeapRoot { .type = HeapRoot::Type::VM });
