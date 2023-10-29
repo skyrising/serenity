@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include <AK/Format.h>
 #include <AK/OwnPtr.h>
 #include <AK/Platform.h>
 #include <LibJS/Bytecode/CommonImplementations.h>
@@ -30,6 +31,7 @@
 #    define LOG_JIT_FAILURE 1
 #    define DUMP_JIT_MACHINE_CODE_TO_STDOUT 0
 #    define DUMP_JIT_DISASSEMBLY 0
+#    define TRACE_BYTECODE 0
 
 #    define TRY_OR_SET_EXCEPTION(expression)                                                                                        \
         ({                                                                                                                          \
@@ -3332,6 +3334,11 @@ void Compiler::native_call(void* function_address, Vector<Assembler::Operand> co
     m_assembler.native_call(bit_cast<u64>(function_address), { Assembler::Operand::Register(ARG0) }, stack_arguments);
 }
 
+[[maybe_unused]] static void cxx_trace_instruction(VM& vm, Bytecode::Instruction const& instruction)
+{
+    dbgln("{}", instruction.to_deprecated_string(vm.bytecode_interpreter().current_executable()));
+}
+
 OwnPtr<NativeExecutable> Compiler::compile(Bytecode::Executable& bytecode_executable)
 {
     if (!getenv("LIBJS_JIT"))
@@ -3397,6 +3404,13 @@ OwnPtr<NativeExecutable> Compiler::compile(Bytecode::Executable& bytecode_execut
                 .block_index = block_index,
                 .bytecode_offset = it.offset(),
             });
+
+            if constexpr (TRACE_BYTECODE) {
+                compiler.m_assembler.mov(
+                    Assembler::Operand::Register(ARG1),
+                    Assembler::Operand::Imm(bit_cast<u64>(&op)));
+                compiler.native_call((void*)cxx_trace_instruction);
+            }
 
             switch (op.type()) {
 #    define CASE_BYTECODE_OP(OpTitleCase, op_snake_case, ...)                                \
