@@ -14,9 +14,8 @@
 
 namespace JS::JIT {
 
-NativeExecutable::NativeExecutable(void* code, size_t size, Vector<BytecodeMapping> mapping)
+NativeExecutable::NativeExecutable(ReadonlyBytes code, Vector<BytecodeMapping> mapping)
     : m_code(code)
-    , m_size(size)
     , m_mapping(move(mapping))
 {
     // Translate block index to instruction address, so the native code can just jump to it.
@@ -25,14 +24,14 @@ NativeExecutable::NativeExecutable(void* code, size_t size, Vector<BytecodeMappi
             continue;
         if (entry.bytecode_offset == 0) {
             VERIFY(entry.block_index == m_block_entry_points.size());
-            m_block_entry_points.append(bit_cast<FlatPtr>(m_code) + entry.native_offset);
+            m_block_entry_points.append(bit_cast<FlatPtr>(m_code.data()) + entry.native_offset);
         }
     }
 }
 
 NativeExecutable::~NativeExecutable()
 {
-    munmap(m_code, m_size);
+    munmap(bit_cast<void*>(m_code.data()), m_code.size());
 }
 
 void NativeExecutable::run(VM& vm, size_t entry_point) const
@@ -44,7 +43,7 @@ void NativeExecutable::run(VM& vm, size_t entry_point) const
     }
 
     typedef void (*JITCode)(VM&, Value* registers, Value* locals, FlatPtr entry_point_address, ExecutionContext&);
-    ((JITCode)m_code)(vm,
+    (bit_cast<JITCode>(m_code.data()))(vm,
         vm.bytecode_interpreter().registers().data(),
         vm.running_execution_context().local_variables.data(),
         entry_point_address,
@@ -90,8 +89,7 @@ private:
 void NativeExecutable::dump_disassembly([[maybe_unused]] Bytecode::Executable const& executable) const
 {
 #if ARCH(X86_64)
-    auto const* code_bytes = static_cast<u8 const*>(m_code);
-    auto stream = X86::SimpleInstructionStream { code_bytes, m_size };
+    auto stream = X86::SimpleInstructionStream { m_code.data(), m_code.size() };
     auto disassembler = X86::Disassembler(stream);
     auto symbol_provider = JITSymbolProvider(*this);
     auto mapping = m_mapping.begin();
@@ -106,7 +104,7 @@ void NativeExecutable::dump_disassembly([[maybe_unused]] Bytecode::Executable co
 
     while (true) {
         auto offset = stream.offset();
-        auto virtual_offset = bit_cast<size_t>(m_code) + offset;
+        auto virtual_offset = bit_cast<size_t>(m_code.data()) + offset;
 
         while (!mapping.is_end() && offset > mapping->native_offset)
             ++mapping;
@@ -135,7 +133,7 @@ void NativeExecutable::dump_disassembly([[maybe_unused]] Bytecode::Executable co
         auto length = insn.value().length();
         for (size_t i = 0; i < 7; i++) {
             if (i < length)
-                builder.appendff("{:02x} ", code_bytes[offset + i]);
+                builder.appendff("{:02x} ", m_code[offset + i]);
             else
                 builder.append("   "sv);
         }
@@ -147,7 +145,7 @@ void NativeExecutable::dump_disassembly([[maybe_unused]] Bytecode::Executable co
             builder.clear();
             builder.appendff("{:p} ", virtual_offset + bytes_printed);
             for (size_t i = bytes_printed; i < bytes_printed + 7 && i < length; i++)
-                builder.appendff(" {:02x}", code_bytes[offset + i]);
+                builder.appendff(" {:02x}", m_code[offset + i]);
             dbgln("{}", builder.string_view());
         }
     }
@@ -175,8 +173,8 @@ BytecodeMapping const& NativeExecutable::find_mapping_entry(size_t native_offset
 
 Optional<UnrealizedSourceRange> NativeExecutable::get_source_range(Bytecode::Executable const& executable, FlatPtr address) const
 {
-    auto start = bit_cast<FlatPtr>(m_code);
-    auto end = start + m_size;
+    auto start = bit_cast<FlatPtr>(m_code.data());
+    auto end = start + m_code.size();
     if (address < start || address >= end)
         return {};
     auto const& entry = find_mapping_entry(address - start - 1);

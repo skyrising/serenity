@@ -9,6 +9,7 @@
 
 #include <AK/Platform.h>
 #include <LibJIT/Assembler.h>
+#include <LibJIT/CodeBuffer.h>
 #include <LibJS/Bytecode/Executable.h>
 #include <LibJS/Bytecode/Op.h>
 #include <LibJS/JIT/NativeExecutable.h>
@@ -236,7 +237,7 @@ private:
 
     HashMap<Bytecode::BasicBlock const*, NonnullOwnPtr<BasicBlockData>> m_basic_block_data;
 
-    Vector<u8> m_output;
+    CodeBuffer m_output;
     Assembler m_assembler { m_output };
     Assembler::Label m_exit_label;
     Bytecode::Executable& m_bytecode_executable;

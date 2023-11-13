@@ -8,16 +8,17 @@
 
 #include <AK/Platform.h>
 #include <AK/Vector.h>
+#include <LibJIT/CodeBuffer.h>
 
 namespace JIT {
 
 struct X86_64Assembler {
-    X86_64Assembler(Vector<u8>& output)
+    X86_64Assembler(CodeBuffer& output)
         : m_output(output)
     {
     }
 
-    Vector<u8>& m_output;
+    CodeBuffer& m_output;
 
     enum class Reg {
         RAX = 0,
@@ -427,22 +428,12 @@ struct X86_64Assembler {
 
     void emit32(u32 value)
     {
-        m_output.append((value >> 0) & 0xff);
-        m_output.append((value >> 8) & 0xff);
-        m_output.append((value >> 16) & 0xff);
-        m_output.append((value >> 24) & 0xff);
+        m_output.append32(value);
     }
 
     void emit64(u64 value)
     {
-        m_output.append((value >> 0) & 0xff);
-        m_output.append((value >> 8) & 0xff);
-        m_output.append((value >> 16) & 0xff);
-        m_output.append((value >> 24) & 0xff);
-        m_output.append((value >> 32) & 0xff);
-        m_output.append((value >> 40) & 0xff);
-        m_output.append((value >> 48) & 0xff);
-        m_output.append((value >> 56) & 0xff);
+        m_output.append64(value);
     }
 
     struct Label {

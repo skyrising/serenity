@@ -3486,25 +3486,19 @@ OwnPtr<NativeExecutable> Compiler::compile(Bytecode::Executable& bytecode_execut
     compiler.flush_cached_accumulator();
     compiler.m_assembler.exit();
 
-    auto* executable_memory = mmap(nullptr, compiler.m_output.size(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
-    if (executable_memory == MAP_FAILED) {
-        dbgln("mmap: {}", strerror(errno));
-        return nullptr;
-    }
-
     for (auto& block : bytecode_executable.basic_blocks) {
         auto& block_data = compiler.block_data_for(*block);
         block_data.label.link_to(compiler.m_assembler, block_data.start_offset);
     }
 
+    auto executable_memory = compiler.m_output.bytes();
+
     if constexpr (DUMP_JIT_MACHINE_CODE_TO_STDOUT) {
-        (void)write(STDOUT_FILENO, compiler.m_output.data(), compiler.m_output.size());
+        (void)write(STDOUT_FILENO, executable_memory.data(), executable_memory.size());
     }
 
-    memcpy(executable_memory, compiler.m_output.data(), compiler.m_output.size());
-
-    if (mprotect(executable_memory, compiler.m_output.size(), PROT_READ | PROT_EXEC) < 0) {
-        dbgln("mprotect: {}", strerror(errno));
+    if (auto mark_executable_result = compiler.m_output.mark_executable(); mark_executable_result.is_error()) {
+        dbgln("mprotect: {}", mark_executable_result.error());
         return nullptr;
     }
 
@@ -3516,12 +3510,12 @@ OwnPtr<NativeExecutable> Compiler::compile(Bytecode::Executable& bytecode_execut
 
     if constexpr (DUMP_PERF_JITDUMP) {
         auto symbol = MUST(String::formatted("jit_{}_{:p}", bytecode_executable.name, bit_cast<FlatPtr>(&bytecode_executable)));
-        auto jitdump_result = write_jitdump(bytecode_executable, { executable_memory, compiler.m_output.size() }, symbol, mapping);
+        auto jitdump_result = write_jitdump(bytecode_executable, executable_memory, symbol, mapping);
         if (jitdump_result.is_error())
             warnln("Failed to write jitdump {}", jitdump_result.error());
     }
 
-    auto executable = make<NativeExecutable>(executable_memory, compiler.m_output.size(), mapping);
+    auto executable = make<NativeExecutable>(executable_memory, mapping);
     if constexpr (DUMP_JIT_DISASSEMBLY)
         executable->dump_disassembly(bytecode_executable);
     return executable;

@@ -28,7 +28,7 @@ class NativeExecutable {
     AK_MAKE_NONMOVABLE(NativeExecutable);
 
 public:
-    NativeExecutable(void* code, size_t size, Vector<BytecodeMapping>);
+    NativeExecutable(ReadonlyBytes code, Vector<BytecodeMapping>);
     ~NativeExecutable();
 
     void run(VM&, size_t entry_point) const;
@@ -36,11 +36,10 @@ public:
     BytecodeMapping const& find_mapping_entry(size_t native_offset) const;
     Optional<UnrealizedSourceRange> get_source_range(Bytecode::Executable const& executable, FlatPtr address) const;
 
-    ReadonlyBytes code_bytes() const { return { m_code, m_size }; }
+    ReadonlyBytes code_bytes() const { return m_code; }
 
 private:
-    void* m_code { nullptr };
-    size_t m_size { 0 };
+    ReadonlyBytes m_code;
     Vector<BytecodeMapping> m_mapping;
     Vector<FlatPtr> m_block_entry_points;
     mutable OwnPtr<Bytecode::InstructionStreamIterator> m_instruction_stream_iterator;

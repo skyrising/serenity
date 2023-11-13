@@ -1,6 +1,7 @@
 set(SOURCES
     Assembler.cpp
         JITDumpFile.cpp
+        CodeBuffer.cpp
 )
 
 serenity_lib(LibJIT jit)
