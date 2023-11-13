@@ -8,6 +8,7 @@
 #include <AK/Format.h>
 #include <AK/OwnPtr.h>
 #include <AK/Platform.h>
+#include <LibJIT/JITDumpFile.h>
 #include <LibJS/Bytecode/CommonImplementations.h>
 #include <LibJS/Bytecode/Instruction.h>
 #include <LibJS/Bytecode/Interpreter.h>
@@ -31,6 +32,7 @@
 #    define LOG_JIT_FAILURE 1
 #    define DUMP_JIT_MACHINE_CODE_TO_STDOUT 0
 #    define DUMP_JIT_DISASSEMBLY 0
+#    define DUMP_PERF_JITDUMP 0
 #    define TRACE_BYTECODE 0
 
 #    define TRY_OR_SET_EXCEPTION(expression)                                                                                        \
@@ -3339,6 +3341,47 @@ void Compiler::native_call(void* function_address, Vector<Assembler::Operand> co
     dbgln("{}", instruction.to_deprecated_string(vm.bytecode_interpreter().current_executable()));
 }
 
+[[maybe_unused]] static ErrorOr<void> write_jitdump(Bytecode::Executable& executable, ReadonlyBytes code, StringView symbol, Vector<BytecodeMapping> const& mapping)
+{
+    static OwnPtr<::JIT::JITDumpFile> s_jit_dump_file;
+    if (!s_jit_dump_file) {
+        auto filename = TRY(String::formatted("/tmp/jit-{}.dump", getpid()));
+        s_jit_dump_file = TRY(::JIT::JITDumpFile::open(filename));
+    }
+    Vector<::JIT::JITDumpFile::DebugEntry> debug_entries;
+    SourceCode const* last_source_code = nullptr;
+    size_t last_offset = 0;
+
+    auto should_include = [&](UnrealizedSourceRange const& unrealized) {
+        if (unrealized.source_code == last_source_code && unrealized.end_offset < last_offset)
+            return false;
+        last_source_code = unrealized.source_code;
+        last_offset = unrealized.end_offset;
+        return true;
+    };
+
+    for (auto entry : mapping) {
+        if (entry.block_index == BytecodeMapping::EXECUTABLE)
+            continue;
+        auto const& block = *executable.basic_blocks[entry.block_index];
+        auto iterator = Bytecode::InstructionStreamIterator { block.instruction_stream(), &executable, entry.bytecode_offset };
+        if (iterator.at_end())
+            continue;
+        auto unrealized = iterator.source_range();
+        if (!should_include(unrealized))
+            continue;
+        auto range = unrealized.realize();
+        DeprecatedFlyString filename = range.filename();
+        debug_entries.empend(
+            bit_cast<FlatPtr>(code.data()) + entry.native_offset,
+            static_cast<u32>(range.start.line),
+            static_cast<u32>(range.start.column),
+            filename);
+    }
+    TRY(s_jit_dump_file->emit_code_load(code, symbol, debug_entries));
+    return {};
+}
+
 OwnPtr<NativeExecutable> Compiler::compile(Bytecode::Executable& bytecode_executable)
 {
     if (!getenv("LIBJS_JIT"))
@@ -3469,6 +3512,13 @@ OwnPtr<NativeExecutable> Compiler::compile(Bytecode::Executable& bytecode_execut
         static size_t s_total_compiled_bytes = 0;
         s_total_compiled_bytes += compiler.m_output.size();
         dbgln("\033[32;1mJIT compilation succeeded!\033[0m {} size={} total={}", bytecode_executable.name, compiler.m_output.size(), s_total_compiled_bytes);
+    }
+
+    if constexpr (DUMP_PERF_JITDUMP) {
+        auto symbol = MUST(String::formatted("jit_{}_{:p}", bytecode_executable.name, bit_cast<FlatPtr>(&bytecode_executable)));
+        auto jitdump_result = write_jitdump(bytecode_executable, { executable_memory, compiler.m_output.size() }, symbol, mapping);
+        if (jitdump_result.is_error())
+            warnln("Failed to write jitdump {}", jitdump_result.error());
     }
 
     auto executable = make<NativeExecutable>(executable_memory, compiler.m_output.size(), mapping);

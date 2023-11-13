@@ -4,6 +4,8 @@ shared_library("LibJIT") {
   sources = [
     "Assembler.cpp",
     "Assembler.h",
+    "JITDumpFile.cpp",
+    "JITDumpFile.h",
   ]
   deps = [
     "//AK",

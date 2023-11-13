@@ -54,7 +54,7 @@ void SourceCode::fill_position_cache() const
         previous_code_point_was_carriage_return = code_point == '\r';
 
         auto byte_offset = view.byte_offset_of(it);
-        if ((byte_offset - offset_of_last_starting_point) >= minimum_distance_between_cached_positions) {
+        if (is_line_terminator || (byte_offset - offset_of_last_starting_point) >= minimum_distance_between_cached_positions) {
             m_cached_positions.append({ .line = line, .column = column, .offset = byte_offset });
             offset_of_last_starting_point = byte_offset;
         }
@@ -105,6 +105,18 @@ SourceRange SourceCode::range_from_offsets(u32 start_offset, u32 end_offset) con
                 .column = current.column,
                 .offset = start_offset,
             };
+
+            if (end_offset - start_offset > 10000 && !m_cached_positions.is_empty()) {
+                Position const dummy;
+                size_t nearest_index = 0;
+                binary_search(m_cached_positions, dummy, &nearest_index,
+                    [&](auto&, auto& starting_point) {
+                        return end_offset - starting_point.offset;
+                    });
+
+                current = m_cached_positions[nearest_index];
+                it = view.iterator_at_byte_offset_without_validation(current.offset);
+            }
         }
 
         // If we're on or after the end offset, this is the end position.
