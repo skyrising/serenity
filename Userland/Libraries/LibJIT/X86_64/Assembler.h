@@ -375,6 +375,16 @@ struct X86_64Assembler {
             return;
         }
 
+        if (dst.type == Operand::Type::FReg && src.type == Operand::Type::Imm && src.offset_or_immediate == 0 && patchable == Patchable::No) {
+            // pxor dst, dst
+            emit8(0x66);
+            emit_rex_for_mr(dst, dst, REX_W::No);
+            emit8(0x0f);
+            emit8(0xef);
+            emit_modrm_mr(dst, dst);
+            return;
+        }
+
         VERIFY_NOT_REACHED();
     }
 
@@ -1014,6 +1024,17 @@ struct X86_64Assembler {
         emit8(0xf2);
         emit8(0x0f);
         emit8(0x2a);
+        emit_modrm_rm(dst, src);
+    }
+
+    void sqrt(Operand dst, Operand src)
+    {
+        VERIFY(dst.type == Operand::Type::FReg);
+        VERIFY(src.type == Operand::Type::FReg);
+
+        emit8(0xf2);
+        emit8(0x0f);
+        emit8(0x51);
         emit_modrm_rm(dst, src);
     }
 

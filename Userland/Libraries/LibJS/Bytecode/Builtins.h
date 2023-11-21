@@ -12,8 +12,9 @@
 namespace JS::Bytecode {
 
 // TitleCaseName, snake_case_name, base, property, argument_count
-#define JS_ENUMERATE_BUILTINS(O) \
-    O(MathAbs, math_abs, Math, abs, 1)
+#define JS_ENUMERATE_BUILTINS(O)       \
+    O(MathAbs, math_abs, Math, abs, 1) \
+    O(MathSqrt, math_sqrt, Math, sqrt, 1)
 
 enum class Builtin {
 #define DEFINE_BUILTIN_ENUM(name, ...) name,

@@ -31,7 +31,7 @@ void MathObject::initialize(Realm& realm)
     u8 attr = Attribute::Writable | Attribute::Configurable;
     define_native_function(realm, vm.names.abs, abs, 1, attr, Bytecode::Builtin::MathAbs);
     define_native_function(realm, vm.names.random, random, 0, attr);
-    define_native_function(realm, vm.names.sqrt, sqrt, 1, attr);
+    define_native_function(realm, vm.names.sqrt, sqrt, 1, attr, Bytecode::Builtin::MathSqrt);
     define_native_function(realm, vm.names.floor, floor, 1, attr);
     define_native_function(realm, vm.names.ceil, ceil, 1, attr);
     define_native_function(realm, vm.names.round, round, 1, attr);

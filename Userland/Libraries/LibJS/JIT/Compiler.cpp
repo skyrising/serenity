@@ -390,6 +390,29 @@ void Compiler::convert_to_double(Assembler::Reg dst, Assembler::Reg src, Assembl
     end.link(m_assembler);
 }
 
+void Compiler::canonicalize_nan(Assembler::Reg dst, Assembler::Reg src, Assembler::Reg nan_register, Assembler::Label& end)
+{
+    // if src != src then dst = NaN (canonical)
+    Assembler::Label nan_case;
+    m_assembler.jump_if(
+        Assembler::Operand::FloatRegister(src),
+        Assembler::Condition::Unordered,
+        Assembler::Operand::FloatRegister(src),
+        nan_case);
+
+    // else dst = src
+    m_assembler.mov(
+        Assembler::Operand::Register(dst),
+        Assembler::Operand::FloatRegister(src));
+    m_assembler.jump(end);
+
+    nan_case.link(m_assembler);
+    m_assembler.mov(
+        Assembler::Operand::Register(dst),
+        Assembler::Operand::Register(nan_register));
+    m_assembler.jump(end);
+}
+
 template<typename CodegenI32, typename CodegenDouble, typename CodegenValue>
 void Compiler::compile_binary_op_fastpaths(Assembler::Reg lhs, Assembler::Reg rhs, CodegenI32 codegen_i32, CodegenDouble codegen_double, CodegenValue codegen_value)
 {
@@ -421,22 +444,9 @@ void Compiler::compile_binary_op_fastpaths(Assembler::Reg lhs, Assembler::Reg rh
     convert_to_double(FPR0, ARG1, nan_register, temp_register, slow_case);
     convert_to_double(FPR1, ARG2, nan_register, temp_register, slow_case);
     auto result_fp_register = codegen_double(FPR0, FPR1);
-    // if result != result then result = nan (canonical)
-    Assembler::Label nan_case;
-    m_assembler.jump_if(
-        Assembler::Operand::FloatRegister(result_fp_register),
-        Assembler::Condition::Unordered,
-        Assembler::Operand::FloatRegister(result_fp_register),
-        nan_case);
-    m_assembler.mov(
-        Assembler::Operand::Register(CACHED_ACCUMULATOR),
-        Assembler::Operand::FloatRegister(result_fp_register));
-    m_assembler.jump(end);
-    nan_case.link(m_assembler);
-    m_assembler.mov(
-        Assembler::Operand::Register(CACHED_ACCUMULATOR),
-        Assembler::Operand::Register(nan_register));
-    m_assembler.jump(end);
+
+    // accumulator = Value(result)
+    canonicalize_nan(CACHED_ACCUMULATOR, result_fp_register, nan_register, end);
 
     slow_case.link(m_assembler);
 
@@ -2658,6 +2668,46 @@ void Compiler::compile_builtin_math_abs(Assembler::Label& slow_case, Assembler::
     store_accumulator(ARG2);
 
     m_assembler.jump(end);
+}
+
+void Compiler::compile_builtin_math_sqrt(Assembler::Label& slow_case, Assembler::Label& end)
+{
+    Assembler::Label double_case;
+    Assembler::Label do_sqrt;
+    auto nan_register = GPR1;
+    m_assembler.mov(Assembler::Operand::Register(nan_register), Assembler::Operand::Imm(CANON_NAN_BITS));
+
+    branch_if_int32(ARG2, [&] {
+        // FPR0 = (double) ARG1
+        m_assembler.convert_i32_to_double(Assembler::Operand::FloatRegister(FPR0), Assembler::Operand::Register(ARG2));
+        m_assembler.jump(double_case);
+    });
+
+    // if (ARG1.is_double()) FPR0 = ARG1; else goto slow_case;
+    jump_if_not_double(ARG2, nan_register, GPR0, slow_case);
+    m_assembler.mov(Assembler::Operand::FloatRegister(FPR0), Assembler::Operand::Register(ARG2));
+
+    double_case.link(m_assembler);
+
+    // if (FPR0 >= 0) goto do_sqrt;
+    m_assembler.mov(Assembler::Operand::FloatRegister(FPR1), Assembler::Operand::Imm(0));
+    m_assembler.jump_if(
+        Assembler::Operand::FloatRegister(FPR0),
+        Assembler::Condition::AboveOrEqual,
+        Assembler::Operand::FloatRegister(FPR1),
+        do_sqrt);
+
+    // accumulator = NaN;
+    store_accumulator(nan_register);
+    m_assembler.jump(end);
+
+    do_sqrt.link(m_assembler);
+
+    // FPR0 = sqrt(FPR0)
+    m_assembler.sqrt(Assembler::Operand::FloatRegister(FPR0), Assembler::Operand::FloatRegister(FPR0));
+
+    // accumulator = Value(FPR0)
+    canonicalize_nan(CACHED_ACCUMULATOR, FPR0, nan_register, end);
 }
 
 static Value cxx_call_with_argument_array(VM& vm, Value arguments, Value callee, Value this_value, Bytecode::Op::CallType call_type, Optional<Bytecode::StringTableIndex> const& expression_string)

@@ -207,6 +207,8 @@ private:
 
     void jump_if_not_double(Assembler::Reg reg, Assembler::Reg nan, Assembler::Reg temp, Assembler::Label&);
 
+    void canonicalize_nan(Assembler::Reg dst, Assembler::Reg src, Assembler::Reg nan_register, Assembler::Label& end);
+
     template<typename CodegenI32, typename CodegenDouble, typename CodegenValue>
     void compile_binary_op_fastpaths(Assembler::Reg lhs, Assembler::Reg rhs, CodegenI32, CodegenDouble, CodegenValue);
     template<typename CodegenI32, typename CodegenDouble, typename CodegenValue>
